@@ -1,48 +1,47 @@
-name: CI - Build & Test
+name: CI - Build, Test & Security Scan
 
 on:
   push:
+    branches: [ "main" ]
   pull_request:
+    branches: [ "main" ]
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: '18'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build
+      - name: Build application
         run: npm run build
 
-      - name: Start app
-        run: |
-          npm start &
-          echo $! > app.pid
-          echo "App started with PID $(cat app.pid)"
+      - name: Start application
+        run: npm start &
 
-      - name: Wait for server to be ready
-        run: |
-          npx --yes wait-on http://localhost:3000
+      - name: Wait for app to be ready
+        run: npx wait-on http://localhost:3000 --timeout 60000
 
-      - name: Test with curl
-        run: |
-          curl -I http://localhost:3000 | grep "200"
+      - name: Verify app is running with curl
+        run: curl -I http://localhost:3000
 
-      - name: Show logs if failed
-        if: failure()
-        run: cat app.log
-
-      - name: Stop app
-        if: always()
-        run: |
-          kill $(cat app.pid) || true
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
